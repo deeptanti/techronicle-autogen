@@ -1,0 +1,47 @@
+# Core AutoGen and AI
+pyautogen==0.2.20
+openai
+
+# Web Interface
+streamlit
+plotly
+pandas
+
+# RSS and Web Scraping
+feedparser
+beautifulsoup4
+requests
+newspaper3k
+lxml
+html5lib
+
+# Date and Time
+python-dateutil
+
+# Data Validation and Config
+pydantic
+python-dotenv
+pyyaml
+
+# CLI Interface
+rich
+typer
+
+# Text Processing and NLP
+nltk
+textstat
+
+# Web Scraping & Content Processing
+selenium
+webdriver-manager
+fake-useragent
+readability-lxml
+
+# Slack Integration
+slack-sdk
+slack-bolt
+
+# Additional Utilities
+validators
+tldextract
+chardet
