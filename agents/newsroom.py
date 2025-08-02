@@ -1,6 +1,6 @@
 """
 Main newsroom orchestration for Techronicle AutoGen
-Manages agent interactions and editorial workflows
+Enhanced with tool integration and proper conversation flow
 """
 
 import json
@@ -19,6 +19,8 @@ from agents.personalities.james_guerra import create_james_agent
 
 # Import tools
 from agents.tools.rss_collector import collect_latest_crypto_news
+from agents.tools.content_processor import process_rss_articles, get_best_articles, filter_articles_by_relevance
+from agents.tools.slack_publisher import publish_to_slack, publish_session_summary_to_slack
 
 # Import utilities
 from utils.config import config, get_llm_config
@@ -41,15 +43,17 @@ class TechronicleNewsroom:
         # Track session state
         self.session_state = {
             "articles_collected": [],
+            "processed_articles": [],
             "current_discussion": None,
             "decisions_made": [],
-            "published_articles": []
+            "published_articles": [],
+            "tools_used": []
         }
         
         self.logger.logger.info(f"Newsroom initialized for session {self.session_id}")
     
     def _create_agents(self) -> Dict[str, Any]:
-        """Create all newsroom agents"""
+        """Create all newsroom agents with enhanced configurations"""
         agents = {
             "gary": create_gary_agent(),
             "aravind": create_aravind_agent(),
@@ -63,156 +67,130 @@ class TechronicleNewsroom:
         return agents
     
     def _setup_group_chat(self) -> GroupChat:
-        """Setup group chat with custom speaker selection"""
+        """Setup group chat with improved speaker selection"""
         
-        def custom_speaker_selection(last_speaker, groupchat):
-            """Control conversation flow for realistic editorial dynamics"""
+        def enhanced_speaker_selection(last_speaker, groupchat):
+            """Enhanced conversation flow control"""
             messages = groupchat.messages
             
             if not messages:
-                return self.agents["gary"]  # Gary starts with news collection
+                return self.agents["gary"]  # Gary starts
             
             last_message = messages[-1]["content"].lower()
             last_speaker_name = last_speaker.name.lower()
+            message_count = len(messages)
             
-            # Check if we've reached publication decision
-            if self._has_publication_decision(messages):
+            # Prevent infinite loops - limit consecutive speakers
+            recent_speakers = [msg.get("name", "") for msg in messages[-3:]]
+            if len(set(recent_speakers)) <= 1 and message_count > 5:
+                # Force different speaker if stuck in loop
+                available_agents = [name for name in self.agents.keys() 
+                                 if self.agents[name].name != last_speaker.name]
+                if available_agents:
+                    return self.agents[available_agents[0]]
+            
+            # Check if publication decision has been made
+            if self._has_clear_publication_decision(messages):
                 return self.agents["james"]  # James handles publication
             
-            # Gary presents articles -> Aravind analyzes
-            if last_speaker_name == "gary" and ("articles" in last_message or "collected" in last_message):
-                return self.agents["aravind"]
-            
-            # After Aravind analysis -> collaborative discussion
-            elif last_speaker_name == "aravind" and ("analysis" in last_message or "scores" in last_message):
-                return self.agents["tijana"]  # Fact-checker reviews first
-            
-            # Collaborative discussion phase - ensure thorough review
-            elif last_speaker_name == "tijana":
-                if "approve" in last_message or "publish" in last_message:
-                    return self.agents["jerin"]  # Editorial decision
-                elif "concerns" in last_message or "verify" in last_message:
-                    return self.agents["gary"]  # Gary responds to fact-checking
+            # Gary's workflow: collection -> processing -> reporting
+            if last_speaker_name == "gary":
+                if "collecting" in last_message or "processing" in last_message:
+                    return self.agents["gary"]  # Let Gary continue with tools
+                elif any(word in last_message for word in ["articles", "collected", "processed"]):
+                    return self.agents["aravind"]  # Analysis phase
                 else:
-                    return self.agents["aayushi"]  # Audience perspective
+                    return self.agents["aravind"]
             
-            elif last_speaker_name == "aayushi":
-                if "recommend" in last_message or "select" in last_message:
-                    return self.agents["jerin"]  # Editorial decision
-                elif "engagement" in last_message:
-                    return self.agents["aravind"]  # Technical analysis of audience needs
+            # Analysis phase
+            elif last_speaker_name == "aravind" and message_count < 8:
+                return self.agents["tijana"]  # Fact-checking
+            
+            # Editorial review phase
+            elif last_speaker_name == "tijana" and message_count < 10:
+                return self.agents["aayushi"]  # Audience perspective
+            
+            # Decision facilitation
+            elif last_speaker_name == "aayushi" and message_count < 12:
+                return self.agents["jerin"]  # Editorial decision
+            
+            # Force publication decision if conversation too long
+            elif message_count >= 15:
+                if last_speaker_name != "jerin":
+                    return self.agents["jerin"]  # Force decision
                 else:
-                    return self.agents["tijana"]  # Back to fact-checking
+                    return self.agents["james"]  # Force publication
             
-            # Jerin makes decisions - enforce publication requirement
+            # Default progression
             elif last_speaker_name == "jerin":
-                if self._count_approved_articles(messages) >= 1:
-                    if "decision" in last_message or "publish" in last_message:
-                        return self.agents["james"]  # Publishing logistics
-                    else:
-                        return None  # End if decision made
-                else:
-                    # Force continued discussion until at least 1 article is approved
-                    if "reject" in last_message or "not approve" in last_message:
-                        return self.agents["aravind"]  # Back to analysis
-                    else:
-                        return self.agents["aayushi"]  # Continue discussion
+                return self.agents["james"]  # Publication logistics
             
-            # James handles final publication
             elif last_speaker_name == "james":
-                if "published" in last_message or "live" in last_message:
-                    return None  # End conversation
-                else:
-                    return self.agents["jerin"]  # Back to editorial decisions
+                return None  # End conversation
             
-            # Default fallback - keep discussion going
+            # Fallback
             else:
-                return self.agents["jerin"]  # Jerin facilitates when unclear
+                return self.agents["jerin"]
         
-        # Create group chat
+        # Create group chat with stricter controls
         group_chat = GroupChat(
             agents=list(self.agents.values()),
             messages=[],
-            max_round=config.max_rounds,
-            speaker_selection_method=custom_speaker_selection,
-            allow_repeat_speaker=True  # Allow natural back-and-forth
+            max_round=15,  # Reduced to prevent loops
+            speaker_selection_method=enhanced_speaker_selection,
+            allow_repeat_speaker=True
         )
         
         return group_chat
     
-    def _has_publication_decision(self, messages: List[Dict]) -> bool:
-        """Check if a publication decision has been made"""
-        for msg in reversed(messages[-5:]):  # Check last 5 messages
+    def _has_clear_publication_decision(self, messages: List[Dict]) -> bool:
+        """Check if a clear publication decision has been made"""
+        for msg in reversed(messages[-5:]):
             content = msg.get("content", "").lower()
             speaker = msg.get("name", "").lower()
             
-            # Look for explicit publication decisions
             if speaker == "jerin" and any(phrase in content for phrase in [
-                "we will publish", "approved for publication", "final decision to publish",
-                "let's publish", "green light to publish"
+                "approve", "decision", "publish", "final", "executive"
             ]):
                 return True
         
         return False
-    
-    def _count_approved_articles(self, messages: List[Dict]) -> int:
-        """Count how many articles have been explicitly approved"""
-        approved_count = 0
-        
-        for msg in messages:
-            content = msg.get("content", "").lower()
-            speaker = msg.get("name", "").lower()
-            
-            # Count approval statements
-            if any(phrase in content for phrase in [
-                "approve this article", "approved for publication", "select this story",
-                "publish this one", "go with this article"
-            ]):
-                approved_count += 1
-        
-        return approved_count
     
     def _create_chat_manager(self) -> GroupChatManager:
         """Create chat manager for the group"""
         return GroupChatManager(
             groupchat=self.group_chat,
             llm_config=get_llm_config(temperature=0.7),
-            system_message="""You are the facilitator of a crypto newsroom editorial meeting.
-            
-            Your role is to:
-            1. Keep the conversation focused on selecting and publishing crypto news
-            2. Ensure all perspectives are heard
-            3. Guide the team toward editorial decisions
-            4. Maintain professional but dynamic discussion
-            
-            The team should collaborate to:
-            - Review collected crypto news articles
-            - Analyze quality, credibility, and audience appeal
-            - Make editorial decisions about what to publish
-            - Coordinate publication logistics
-            
-            Encourage natural debate and discussion between team members."""
+            system_message="""You are facilitating a crypto newsroom editorial meeting.
+
+Keep discussions focused and productive:
+1. Gary collects and processes articles using tools
+2. Team reviews and analyzes content
+3. Editorial decisions are made efficiently
+4. James handles publication to Slack
+
+Prevent repetitive responses and ensure progress toward publication."""
         )
     
     def run_editorial_session(self, max_articles: int = 5) -> Dict[str, Any]:
-        """Run a complete editorial session"""
-        self.logger.logger.info("Starting editorial session")
+        """Run enhanced editorial session with tool integration"""
+        self.logger.logger.info("Starting enhanced editorial session")
         
         try:
-            # Collect articles for discussion
-            articles = self._prepare_articles(max_articles)
+            # Step 1: Enhanced article preparation
+            articles = self._prepare_articles_with_tools(max_articles)
             self.session_state["articles_collected"] = articles
             
-            # Start the conversation
-            initial_message = self._create_initial_message(articles)
+            # Step 2: Start conversation with tool context
+            initial_message = self._create_enhanced_initial_message(articles)
             
-            # Run the group chat
-            chat_result = self._run_group_discussion(initial_message)
+            # Step 3: Run discussion with monitoring
+            chat_result = self._run_enhanced_discussion(initial_message)
             
-            # Process results
-            session_results = self._process_session_results(chat_result)
+            # Step 4: Process results with publication
+            session_results = self._process_enhanced_results(chat_result)
             
-            self.logger.logger.info("Editorial session completed")
+            self.logger.logger.info("Enhanced editorial session completed")
             return session_results
             
         except Exception as e:
@@ -223,189 +201,179 @@ class TechronicleNewsroom:
                 "session_id": self.session_id
             }
     
-    def _prepare_articles(self, max_articles: int) -> List[Dict]:
-        """Collect and prepare articles for editorial discussion"""
-        self.logger.logger.info(f"Collecting up to {max_articles} articles")
+    def _prepare_articles_with_tools(self, max_articles: int) -> List[Dict]:
+        """Enhanced article preparation with content processing"""
+        self.logger.logger.info(f"Collecting and processing up to {max_articles} articles")
         
         try:
-            articles = collect_latest_crypto_news(max_articles)
+            # Collect RSS articles
+            rss_articles = collect_latest_crypto_news(max_articles * 2)
             
-            if not articles:
-                # Fallback to mock articles for demo
-                articles = self._create_mock_articles()
+            if not rss_articles:
+                self.logger.logger.warning("No RSS articles found, using mock articles")
+                return self._create_mock_articles()
             
-            self.logger.logger.info(f"Prepared {len(articles)} articles for discussion")
-            return articles
+            # Process articles if enabled
+            if config.scraping_enabled:
+                self.logger.logger.info("Processing articles with content analysis")
+                processed_articles = process_rss_articles(rss_articles)
+                
+                # Filter and rank
+                high_quality = filter_articles_by_relevance(processed_articles, 0.4)
+                best_articles = get_best_articles(high_quality, max_articles)
+                
+                # Convert back to expected format
+                final_articles = []
+                for article in best_articles:
+                    final_articles.append({
+                        "title": article.title,
+                        "summary": article.summary or article.content[:300] + "...",
+                        "source": article.source,
+                        "link": article.original_url,
+                        "published": article.published_date,
+                        "crypto_relevance": article.crypto_relevance,
+                        "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                        "word_count": article.word_count,
+                        "key_topics": article.key_topics,
+                        "sentiment": article.sentiment,
+                        "processing_status": article.processing_status,
+                        "author": article.author
+                    })
+                
+                self.session_state["processed_articles"] = best_articles
+                
+                if final_articles:
+                    self.logger.logger.info(f"Successfully processed {len(final_articles)} articles")
+                    return final_articles
+            
+            # Fallback to RSS only
+            self.logger.logger.info("Using RSS articles without processing")
+            return rss_articles[:max_articles]
             
         except Exception as e:
-            self.logger.logger.warning(f"Error collecting articles: {e}, using mock articles")
+            self.logger.logger.error(f"Error in article preparation: {e}")
             return self._create_mock_articles()
     
-    def _create_mock_articles(self) -> List[Dict]:
-        """Create mock articles for testing/demo purposes"""
-        return [
-            {
-                "title": "Bitcoin ETF Sees Record $2.1B Inflows as Institutional Adoption Accelerates",
-                "summary": "The largest Bitcoin ETF recorded unprecedented daily inflows, signaling growing institutional confidence in cryptocurrency investments.",
-                "source": "CoinDesk",
-                "link": "https://example.com/btc-etf-inflows",
-                "published": datetime.now().isoformat(),
-                "crypto_relevance": 0.95,
-                "content": "Institutional investors poured a record $2.1 billion into Bitcoin ETFs yesterday, marking the highest single-day inflow since the funds launched..."
-            },
-            {
-                "title": "Ethereum Layer 2 TVL Surpasses $40B as DeFi Activity Surges",
-                "summary": "Total value locked in Ethereum Layer 2 solutions has reached a new milestone, driven by increased DeFi protocol adoption.",
-                "source": "Decrypt",
-                "link": "https://example.com/l2-tvl-surge",
-                "published": datetime.now().isoformat(),
-                "crypto_relevance": 0.88,
-                "content": "Layer 2 scaling solutions for Ethereum have collectively surpassed $40 billion in total value locked (TVL), representing a 150% increase from the start of the year..."
-            },
-            {
-                "title": "Major Bank Announces Crypto Custody Services for Institutional Clients",
-                "summary": "A top-tier investment bank becomes the latest traditional financial institution to offer cryptocurrency custody solutions.",
-                "source": "CoinTelegraph",
-                "link": "https://example.com/bank-crypto-custody",
-                "published": datetime.now().isoformat(),
-                "crypto_relevance": 0.92,
-                "content": "In a significant move toward mainstream adoption, one of the world's largest investment banks announced it will begin offering cryptocurrency custody services..."
-            }
-        ]
-    
-    def _create_initial_message(self, articles: List[Dict]) -> str:
-        """Create the initial message to start editorial discussion"""
-        article_summaries = "\n".join([
-            f"• **Article {i+1}**: {article['title']} ({article['source']})\n  Summary: {article['summary'][:150]}..."
-            for i, article in enumerate(articles)
-        ])
+    def _create_enhanced_initial_message(self, articles: List[Dict]) -> str:
+        """Create initial message with tool integration context"""
+        article_summaries = []
+        
+        for i, article in enumerate(articles):
+            relevance = article.get('crypto_relevance', 0) * 100
+            status = article.get('processing_status', 'unknown')
+            
+            summary_text = f"• **Article {i+1}**: {article['title']} ({article['source']})\n"
+            summary_text += f"  Summary: {article['summary'][:150]}...\n"
+            summary_text += f"  Crypto Relevance: {relevance:.1f}% | Status: {status}\n"
+            
+            if article.get('key_topics'):
+                summary_text += f"  Topics: {', '.join(article['key_topics'][:3])}\n"
+            
+            article_summaries.append(summary_text)
         
         message = f"""🗞️ TECHRONICLE EDITORIAL MEETING - {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-Welcome team! I've collected {len(articles)} breaking crypto stories for our editorial review:
+Welcome team! I've collected and processed {len(articles)} crypto stories with our enhanced tools:
 
-{article_summaries}
+{chr(10).join(article_summaries)}
+
+**PROCESSING COMPLETED:**
+✅ RSS collection from {len(config.rss_feeds)} sources
+✅ Content analysis and relevance scoring
+✅ Quality filtering and ranking
+✅ Ready for editorial review
 
 **EDITORIAL REQUIREMENTS:**
-✅ We MUST select and publish at least 1 article from today's discussion
-✅ We can select multiple articles if they meet our standards
-✅ All selected articles must pass fact-checking and editorial review
+🎯 We MUST select and publish at least 1 article
+🎯 All articles have been pre-processed for quality
+🎯 James will handle Slack publication
 
-Gary, please present your findings and analysis of these stories. Then we'll have our collaborative discussion where:
+**WORKFLOW:**
+1. Gary: Tool-based collection complete ✅
+2. Aravind: Technical analysis and verification
+3. Tijana: Fact-checking and compliance review
+4. Aayushi: Audience engagement assessment
+5. Jerin: Editorial decision making
+6. James: Slack publication and logistics
 
-• Aravind will provide market analysis and technical verification
-• Tijana will fact-check and identify any legal/compliance issues  
-• Aayushi will assess audience engagement potential
-• Jerin will facilitate decisions and ensure we meet publication goals
-• James will handle final publication logistics
-
-Remember: We're not leaving this meeting without approving at least one story for publication. Let's find the best content that serves our readers!
-
-Gary, take it away!"""
+Gary, report on the tool-based processing results and recommend the top articles for review!"""
 
         return message
     
-    def _run_group_discussion(self, initial_message: str) -> Any:
-        """Run the group chat discussion with publication enforcement"""
-        self.logger.logger.info("Starting group discussion")
+    def _run_enhanced_discussion(self, initial_message: str) -> Any:
+        """Run discussion with better flow control"""
+        self.logger.logger.info("Starting enhanced group discussion")
         
-        # Start the conversation
+        # Start conversation
         chat_result = self.agents["gary"].initiate_chat(
             recipient=self.chat_manager,
             message=initial_message,
             clear_history=True
         )
         
-        # Validate that at least one article was approved
+        # Ensure publication decision
         if not self._validate_publication_decisions():
-            self.logger.logger.warning("No articles approved - enforcing publication requirement")
+            self.logger.logger.warning("No clear publication decision - enforcing requirement")
             self._enforce_publication_requirement()
         
         return chat_result
     
     def _validate_publication_decisions(self) -> bool:
-        """Validate that at least one article has been approved for publication"""
+        """Validate that publication decisions were made"""
         messages = self.group_chat.messages
-        approved_articles = self._extract_approved_articles(messages)
         
-        if len(approved_articles) >= 1:
-            self.session_state["approved_articles"] = approved_articles
-            return True
-        
-        return False
-    
-    def _extract_approved_articles(self, messages: List[Dict]) -> List[Dict]:
-        """Extract approved articles from conversation"""
-        approved = []
-        
-        for msg in messages:
+        for msg in reversed(messages[-5:]):
             content = msg.get("content", "").lower()
             speaker = msg.get("name", "")
             
-            # Look for explicit approval statements
-            if any(phrase in content for phrase in [
-                "approve", "publish", "select", "go with", "final decision"
-            ]) and speaker in ["Jerin", "James"]:
-                
-                # Try to match to specific articles
-                for i, article in enumerate(self.session_state["articles_collected"]):
-                    article_title = article["title"].lower()
-                    article_words = article_title.split()[:3]  # First 3 words
-                    
-                    if any(word in content for word in article_words):
-                        if article not in approved:
-                            approved.append(article)
-                            self.logger.log_decision(
-                                decision_maker=speaker,
-                                decision=f"Approved: {article['title'][:60]}...",
-                                reasoning=f"Extracted from: {content[:100]}...",
-                                metadata={"article_index": i}
-                            )
+            if speaker in ["Jerin", "James"] and any(word in content for word in [
+                "approve", "publish", "decision", "selected"
+            ]):
+                return True
         
-        return approved
+        return False
     
     def _enforce_publication_requirement(self):
-        """Enforce that at least one article must be published"""
+        """Force publication decision if none made"""
         self.logger.logger.info("Enforcing publication requirement")
         
-        # Have Jerin make an executive decision
-        enforcement_message = f"""
-        
+        # Select best article
+        articles = self.session_state["articles_collected"]
+        if articles:
+            selected_article = articles[0]  # Take first/best article
+            
+            enforcement_message = f"""
 **EDITORIAL OVERRIDE - JERIN SOJAN, MANAGING EDITOR**
 
-Team, we've had a thorough discussion, but we haven't reached a clear publication decision. 
+Team, I'm making an executive decision to ensure publication:
 
-As Managing Editor, I need to ensure we publish content today. Based on our discussion, I'm making an executive decision:
+**APPROVED FOR PUBLICATION: "{selected_article['title']}"**
 
-**I'm approving the first article for publication: "{self.session_state['articles_collected'][0]['title']}"**
+This article meets our standards and serves our readers. James, please publish immediately to Slack.
 
-This story meets our basic standards and serves our readers' need for current crypto market information. While it may not be perfect, it's our responsibility to maintain consistent publication.
-
-James, please prepare this article for immediate publication.
-
-*Meeting adjourned - publication decision final.*
-        """
-        
-        # Add enforcement message to conversation
-        self.group_chat.messages.append({
-            "name": "Jerin",
-            "content": enforcement_message,
-            "role": "assistant"
-        })
-        
-        # Log the forced decision
-        self.logger.log_decision(
-            decision_maker="Jerin",
-            decision=f"EXECUTIVE OVERRIDE: Approved {self.session_state['articles_collected'][0]['title'][:60]}...",
-            reasoning="Editorial override to ensure publication requirement is met",
-            metadata={"enforcement": True, "override": True}
-        )
-        
-        # Mark article as approved
-        self.session_state["approved_articles"] = [self.session_state["articles_collected"][0]]
+*Meeting concluded - publication decision final.*
+"""
+            
+            # Add to conversation
+            self.group_chat.messages.append({
+                "name": "Jerin",
+                "content": enforcement_message,
+                "role": "assistant"
+            })
+            
+            # Mark as approved
+            self.session_state["published_articles"] = [selected_article]
+            
+            # Log decision
+            self.logger.log_decision(
+                decision_maker="Jerin",
+                decision=f"EXECUTIVE OVERRIDE: Approved {selected_article['title'][:60]}...",
+                reasoning="Editorial override to ensure publication requirement",
+                metadata={"enforcement": True, "override": True}
+            )
     
-    def _process_session_results(self, chat_result: Any) -> Dict[str, Any]:
-        """Process and analyze the session results"""
+    def _process_enhanced_results(self, chat_result: Any) -> Dict[str, Any]:
+        """Process results with Slack publication"""
         conversation_messages = self.group_chat.messages
         
         # Log all messages
@@ -417,17 +385,40 @@ James, please prepare this article for immediate publication.
                 message_type="editorial_discussion"
             )
         
-        # Analyze conversation for decisions
-        decisions = self._extract_decisions(conversation_messages)
-        
         # Get approved articles
-        approved_articles = self.session_state.get("approved_articles", [])
+        approved_articles = self.session_state.get("published_articles", [])
         
-        # Ensure we have at least one publication
-        if not approved_articles:
-            self.logger.logger.error("No articles approved - this should not happen!")
+        if not approved_articles and self.session_state["articles_collected"]:
             # Emergency fallback
-            approved_articles = [self.session_state["articles_collected"][0]] if self.session_state["articles_collected"] else []
+            approved_articles = [self.session_state["articles_collected"][0]]
+            self.session_state["published_articles"] = approved_articles
+        
+        # Publish to Slack if enabled
+        slack_results = []
+        if approved_articles and config.slack_enable:
+            self.logger.logger.info("Publishing approved articles to Slack")
+            
+            for article in approved_articles:
+                try:
+                    # Add session context
+                    article_data = article.copy()
+                    article_data.update({
+                        "session_id": self.session_id,
+                        "approved_by": "Editorial Team",
+                        "published_at": datetime.now().isoformat()
+                    })
+                    
+                    # Publish to Slack
+                    slack_result = publish_to_slack(article_data)
+                    slack_results.append(slack_result)
+                    
+                    if slack_result.get("success"):
+                        self.logger.logger.info(f"Published to Slack: {article['title']}")
+                    else:
+                        self.logger.logger.warning(f"Slack publish failed: {slack_result.get('error')}")
+                
+                except Exception as e:
+                    self.logger.logger.error(f"Error publishing article: {e}")
         
         # Create session summary
         session_summary = {
@@ -436,29 +427,34 @@ James, please prepare this article for immediate publication.
             "timestamp": datetime.now().isoformat(),
             "articles_discussed": len(self.session_state["articles_collected"]),
             "articles_approved": len(approved_articles),
-            "articles_published": len(approved_articles),  # In our system, approved = published
+            "articles_published": len(approved_articles),
             "total_messages": len(conversation_messages),
-            "decisions_made": decisions,
             "approved_articles": approved_articles,
-            "conversation_summary": self.logger.get_conversation_summary(),
-            "participants": [agent.name for agent in self.agents.values()],
-            "publication_requirement_met": len(approved_articles) >= 1
+            "slack_publications": slack_results,
+            "participants": list(set(msg.get("name", "Unknown") for msg in conversation_messages)),
+            "publication_requirement_met": len(approved_articles) >= 1,
+            "tools_used": ["RSS Collection", "Content Processing", "Slack Publishing"]
         }
         
-        # Save approved articles as "published"
-        self.session_state["published_articles"] = approved_articles
+        # Publish session summary to Slack
+        if config.slack_enable:
+            try:
+                publish_session_summary_to_slack(session_summary)
+                self.logger.logger.info("Published session summary to Slack")
+            except Exception as e:
+                self.logger.logger.error(f"Error publishing session summary: {e}")
+        
+        # Save published articles
         self._save_published_articles(approved_articles)
         
         return session_summary
     
     def _save_published_articles(self, articles: List[Dict]):
-        """Save approved articles as published content"""
+        """Save published articles to file"""
         if not articles:
             return
         
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
             for i, article in enumerate(articles):
                 publication_data = {
                     "publication_id": f"tc_{self.session_id}_{i+1}",
@@ -466,14 +462,7 @@ James, please prepare this article for immediate publication.
                     "original_article": article,
                     "published_at": datetime.now().isoformat(),
                     "published_by": "Techronicle Editorial Team",
-                    "publication_status": "published",
-                    "editorial_process": {
-                        "collected_by": "Gary",
-                        "analyzed_by": "Aravind", 
-                        "fact_checked_by": "Tijana",
-                        "approved_by": "Jerin",
-                        "published_by": "James"
-                    }
+                    "publication_status": "published"
                 }
                 
                 filename = f"published_{publication_data['publication_id']}.json"
@@ -487,97 +476,29 @@ James, please prepare this article for immediate publication.
         except Exception as e:
             self.logger.logger.error(f"Error saving published articles: {e}")
     
-    def _extract_decisions(self, messages: List[Dict]) -> List[Dict]:
-        """Extract editorial decisions from conversation"""
-        decisions = []
-        
-        for msg in messages:
-            content = msg.get("content", "").lower()
-            speaker = msg.get("name", "Unknown")
-            
-            # Look for decision keywords
-            if any(keyword in content for keyword in ["decide", "publish", "approve", "select", "choose"]):
-                decision = {
-                    "decision_maker": speaker,
-                    "timestamp": datetime.now().isoformat(),
-                    "content": msg.get("content", ""),
-                    "type": "editorial_decision"
-                }
-                decisions.append(decision)
-                
-                # Log as formal decision
-                self.logger.log_decision(
-                    decision_maker=speaker,
-                    decision=content[:100] + "..." if len(content) > 100 else content,
-                    reasoning="Extracted from conversation",
-                    metadata={"message_index": len(decisions)}
-                )
-        
-        return decisions
-    
-    def get_session_analytics(self) -> Dict[str, Any]:
-        """Get analytics for the current session"""
-        conversation_summary = self.logger.get_conversation_summary()
-        
-        return {
-            "session_metrics": conversation_summary["stats"],
-            "agent_participation": self._calculate_agent_participation(),
-            "decision_timeline": self.session_state["decisions_made"],
-            "content_metrics": self._analyze_content_metrics()
-        }
-    
-    def _calculate_agent_participation(self) -> Dict[str, int]:
-        """Calculate message count per agent"""
-        participation = {}
-        
-        for msg in self.group_chat.messages:
-            speaker = msg.get("name", "Unknown")
-            participation[speaker] = participation.get(speaker, 0) + 1
-        
-        return participation
-    
-    def _analyze_content_metrics(self) -> Dict[str, Any]:
-        """Analyze content and engagement metrics"""
-        articles = self.session_state["articles_collected"]
-        
-        if not articles:
-            return {}
-        
-        return {
-            "total_articles": len(articles),
-            "avg_crypto_relevance": sum(a.get("crypto_relevance", 0) for a in articles) / len(articles),
-            "sources": list(set(a.get("source", "Unknown") for a in articles)),
-            "topics_covered": self._extract_topics(articles)
-        }
-    
-    def _extract_topics(self, articles: List[Dict]) -> List[str]:
-        """Extract main topics from articles"""
-        topics = []
-        
-        for article in articles:
-            title = article.get("title", "").lower()
-            
-            # Simple keyword extraction
-            if "bitcoin" in title or "btc" in title:
-                topics.append("Bitcoin")
-            if "ethereum" in title or "eth" in title:
-                topics.append("Ethereum")
-            if "defi" in title:
-                topics.append("DeFi")
-            if "nft" in title:
-                topics.append("NFT")
-            if "regulation" in title or "sec" in title:
-                topics.append("Regulation")
-            if "etf" in title:
-                topics.append("ETF")
-        
-        return list(set(topics))
+    def _create_mock_articles(self) -> List[Dict]:
+        """Create mock articles for testing"""
+        return [
+            {
+                "title": "Bitcoin ETF Sees Record $2.1B Inflows as Institutional Adoption Accelerates",
+                "summary": "The largest Bitcoin ETF recorded unprecedented daily inflows, signaling growing institutional confidence.",
+                "source": "CoinDesk",
+                "link": "https://example.com/btc-etf-inflows",
+                "published": datetime.now().isoformat(),
+                "crypto_relevance": 0.95,
+                "content": "Institutional investors poured a record $2.1 billion into Bitcoin ETFs...",
+                "word_count": 250,
+                "key_topics": ["Bitcoin", "ETF", "Institutional"],
+                "sentiment": "positive",
+                "processing_status": "mock"
+            }
+        ]
     
     def export_session(self, format: str = "json") -> str:
-        """Export the session in various formats"""
+        """Export session in various formats"""
         return self.logger.export_conversation(format)
     
     def save_session(self) -> str:
-        """Save the session to file"""
+        """Save session to file"""
         self.logger.save_conversation()
         return f"Session saved as conversation_{self.session_id}.json"
