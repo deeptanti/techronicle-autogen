@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Techronicle AutoGen - Live Newsroom</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+            height: 100vh;
+        }
+
+        .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 25px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        .main-chat {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 25px;
+            border-bottom: 1px solid #e0e0e0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+
+        .status-ready { background: rgba(76, 175, 80, 0.2); color: #4caf50; }
+        .status-running { background: rgba(255, 152, 0, 0.2); color: #ff9800; }
+        .status-completed { background: rgba(76, 175, 80, 0.2); color: #4caf50; }
+        .status-error { background: rgba(244, 67, 54, 0.2); color: #f44336; }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            display: flex;
+            gap: 15px;
+            padding: 20px;
+            border-radius: 16px;
+            background: #f8f9fa;
+            border-left: 4px solid #ddd;
+            animation: slideIn 0.3s ease-out;
+            transition: all 0.3s ease;
+        }
+
+        .message:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.gary { border-left-color: #2196f3; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); }
+        .message.aravind { border-left-color: #9c27b0; background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%); }
+        .message.tijana { border-left-color: #ff9800; background: linear-gradient(135deg, #fff3e0 0%, #ffcc02 100%); }
+        .message.jerin { border-left-color: #4caf50; background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); }
+        .message.aayushi { border-left-color: #e91e63; background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%); }
+        .message.james { border-left-color: #8bc34a; background: linear-gradient(135deg, #f1f8e9 0%, #dcedc1 100%); }
+
+        .message.decision {
+            border: 2px solid #ffc107;
+            background: linear-gradient(135deg, #fff9c4 0%, #fff59d 100%);
+            box-shadow: 0 4px 16px rgba(255, 193, 7, 0.3);
+        }
+
+        .message.tool {
+            border: 2px solid #4caf50;
+            background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
+        }
+
+        .message.urgent {
+            border: 2px solid #f44336;
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+        }
+
+        .message-content {
+            flex: 1;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .speaker-name {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #333;
+        }
+
+        .designation {
+            font-size: 0.8rem;
+            color: #666;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .timestamp {
+            font-size: 0.75rem;
+            color: #999;
+            margin-left: auto;
+        }
+
+        .message-type {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+        }
+
+        .type-decision { background: #ffc107; }
+        .type-tool { background: #4caf50; }
+        .type-urgent { background: #f44336; }
+
+        .message-text {
+            line-height: 1.6;
+            color: #444;
+            white-space: pre-wrap;
+        }
+
+        .controls {
+            margin-bottom: 25px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .control-group input, .control-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: border-color 0.3s;
+        }
+
+        .control-group input:focus, .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #666;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .team-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .team-member {
+            text-align: center;
+            padding: 15px;
+            border-radius: 12px;
+            background: #f8f9fa;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .team-member:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .team-member.active {
+            border-color: #4caf50;
+            background: #e8f5e8;
+        }
+
+        .team-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin: 0 auto 8px;
+            object-fit: cover;
+        }
+
+        .team-name {
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .team-role {
+            font-size: 0.7rem;
+            color: #666;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #ddd;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #888;
+        }
+
+        .scroll-to-bottom {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .scroll-to-bottom:hover {
+            transform: scale(1.1);
+        }
+
+        .live-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            animation: pulse 2s infinite;
+            z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+            
+            .team-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2 style="margin-bottom: 20px; color: #333;">
+                <i class="fas fa-cog"></i> Control Panel
+            </h2>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label for="articles-count">Articles to Process</label>
+                    <input type="number" id="articles-count" min="1" max="10" value="5">
+                </div>
+                
+                <div class="control-group">
+                    <label for="session-id">Custom Session ID (optional)</label>
+                    <input type="text" id="session-id" placeholder="auto-generated">
+                </div>
+                
+                <button class="btn btn-primary" id="start-session">
+                    <i class="fas fa-rocket"></i> Start Enhanced Session
+                </button>
+                
+                <button class="btn btn-secondary" id="stop-session" disabled>
+                    <i class="fas fa-stop"></i> Stop Session
+                </button>
+            </div>
+
+            <h3 style="margin-bottom: 15px; color: #333;">
+                <i class="fas fa-users"></i> Newsroom Team
+            </h3>
+            
+            <div class="team-grid">
+                <div class="team-member" data-agent="gary">
+                    <div class="team-avatar" style="background: #2196f3; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">📰</div>
+                    <div class="team-name">Gary</div>
+                    <div class="team-role">Reporter</div>
+                </div>
+                <div class="team-member" data-agent="aravind">
+                    <div class="team-avatar" style="background: #9c27b0; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">🔍</div>
+                    <div class="team-name">Aravind</div>
+                    <div class="team-role">Analyst</div>
+                </div>
+                <div class="team-member" data-agent="tijana">
+                    <div class="team-avatar" style="background: #ff9800; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">✏️</div>
+                    <div class="team-name">Tijana</div>
+                    <div class="team-role">Editor</div>
+                </div>
+                <div class="team-member" data-agent="jerin">
+                    <div class="team-avatar" style="background: #4caf50; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">⚖️</div>
+                    <div class="team-name">Jerin</div>
+                    <div class="team-role">Manager</div>
+                </div>
+                <div class="team-member" data-agent="aayushi">
+                    <div class="team-avatar" style="background: #e91e63; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">📱</div>
+                    <div class="team-name">Aayushi</div>
+                    <div class="team-role">Audience</div>
+                </div>
+                <div class="team-member" data-agent="james">
+                    <div class="team-avatar" style="background: #8bc34a; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;">🚀</div>
+                    <div class="team-name">James</div>
+                    <div class="team-role">Publisher</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-chat">
+            <div class="header">
+                <h1>
+                    <i class="fas fa-newspaper"></i>
+                    Techronicle AutoGen
+                </h1>
+                <p>Multi-Agent Crypto News Curation - Live Newsroom</p>
+                <div class="status-indicator status-ready" id="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span id="status-text">Ready for new session</span>
+                </div>
+            </div>
+            
+            <div class="chat-container" id="chat-container">
+                <div class="empty-state">
+                    <i class="fas fa-comments"></i>
+                    <h3>No active conversation</h3>
+                    <p>Start a new session to see the live editorial discussion</p>
+                </div>
+            </div>
+            
+            <button class="scroll-to-bottom" id="scroll-to-bottom" style="display: none;">
+                <i class="fas fa-arrow-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="live-indicator" id="live-indicator" style="display: none;">
+        🔴 LIVE
+    </div>
+
+    <script>
+        class NewsroomDashboard {
+            constructor() {
+                this.ws = null;
+                this.isConnected = false;
+                this.messages = [];
+                this.isSessionRunning = false;
+                
+                this.initializeElements();
+                this.attachEventListeners();
+                this.connect();
+            }
+
+            initializeElements() {
+                this.startBtn = document.getElementById('start-session');
+                this.stopBtn = document.getElementById('stop-session');
+                this.chatContainer = document.getElementById('chat-container');
+                this.statusIndicator = document.getElementById('status-indicator');
+                this.statusText = document.getElementById('status-text');
+                this.liveIndicator = document.getElementById('live-indicator');
+                this.scrollBtn = document.getElementById('scroll-to-bottom');
+                this.articlesInput = document.getElementById('articles-count');
+                this.sessionIdInput = document.getElementById('session-id');
+            }
+
+            attachEventListeners() {
+                this.startBtn.addEventListener('click', () => this.startSession());
+                this.stopBtn.addEventListener('click', () => this.stopSession());
+                this.scrollBtn.addEventListener('click', () => this.scrollToBottom());
+                
+                this.chatContainer.addEventListener('scroll', () => {
+                    const isNearBottom = this.chatContainer.scrollTop + this.chatContainer.clientHeight >= this.chatContainer.scrollHeight - 100;
+                    this.scrollBtn.style.display = isNearBottom ? 'none' : 'block';
+                });
+            }
+
+            connect() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                this.ws = new WebSocket(wsUrl);
+                
+                this.ws.onopen = () => {
+                    this.isConnected = true;
+                    console.log('Connected to WebSocket');
+                };
+                
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    this.handleMessage(data);
+                };
+                
+                this.ws.onclose = () => {
+                    this.isConnected = false;
+                    setTimeout(() => this.connect(), 3000); // Reconnect after 3 seconds
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+            }
+
+            handleMessage(data) {
+                switch (data.type) {
+                    case 'conversation_history':
+                        this.loadConversationHistory(data.messages);
+                        break;
+                    case 'new_message':
+                        this.addMessage(data.message);
+                        break;
+                    case 'status_update':
+                        this.updateStatus(data.status, data.details);
+                        break;
+                    case 'error':
+                        this.showError(data.message);
+                        break;
+                }
+            }
+
+            loadConversationHistory(messages) {
+                this.messages = messages;
+                this.renderMessages();
+            }
+
+            addMessage(message) {
+                this.messages.push(message);
+                this.renderMessage(message);
+                this.scrollToBottom();
+                this.updateTeamActivity(message.speaker);
+            }
+
+            renderMessages() {
+                this.chatContainer.innerHTML = '';
+                if (this.messages.length === 0) {
+                    this.showEmptyState();
+                } else {
+                    this.messages.forEach(message => this.renderMessage(message));
+                    this.scrollToBottom();
+                }
+            }
+
+            renderMessage(message) {
+                if (this.chatContainer.querySelector('.empty-state')) {
+                    this.chatContainer.innerHTML = '';
+                }
+
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${message.speaker.toLowerCase()} ${message.message_type}`;
+                
+                const timestamp = new Date(message.timestamp).toLocaleTimeString();
+                
+                let messageTypeIcon = '';
+                if (message.message_type === 'decision') {
+                    messageTypeIcon = '<span class="message-type type-decision">⚖️ DECISION</span>';
+                } else if (message.message_type === 'tool') {
+                    messageTypeIcon = '<span class="message-type type-tool">🔧 TOOLS</span>';
+                } else if (message.message_type === 'urgent') {
+                    messageTypeIcon = '<span class="message-type type-urgent">🚨 URGENT</span>';
+                }
+
+                messageEl.innerHTML = `
+                    <div class="team-avatar" style="background: ${message.color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem; width: 50px; height: 50px; border-radius: 50%;">
+                        ${message.emoji}
+                    </div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="speaker-name">${message.speaker}</span>
+                            <span class="designation">${message.designation}</span>
+                            ${messageTypeIcon}
+                            <span class="timestamp">${timestamp}</span>
+                        </div>
+                        <div class="message-text">${this.formatMessageContent(message.content)}</div>
+                    </div>
+                `;
+
+                this.chatContainer.appendChild(messageEl);
+            }
+
+            formatMessageContent(content) {
+                // Basic formatting for better readability
+                return content
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/`(.*?)`/g, '<code style="background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px;">$1</code>')
+                    .replace(/\n/g, '<br>');
+            }
+
+            updateTeamActivity(speaker) {
+                // Reset all team members
+                document.querySelectorAll('.team-member').forEach(member => {
+                    member.classList.remove('active');
+                });
+                
+                // Highlight active speaker
+                const activeMember = document.querySelector(`[data-agent="${speaker.toLowerCase()}"]`);
+                if (activeMember) {
+                    activeMember.classList.add('active');
+                    setTimeout(() => activeMember.classList.remove('active'), 3000);
+                }
+            }
+
+            updateStatus(status, details) {
+                this.statusIndicator.className = `status-indicator status-${status}`;
+                
+                const statusIcons = {
+                    ready: 'fas fa-circle',
+                    initializing: 'fas fa-spinner fa-spin',
+                    running: 'fas fa-comments',
+                    completed: 'fas fa-check-circle',
+                    error: 'fas fa-exclamation-circle',
+                    stopped: 'fas fa-stop-circle'
+                };
+
+                const statusTexts = {
+                    ready: 'Ready for new session',
+                    initializing: 'Initializing agents...',
+                    running: 'Editorial discussion in progress',
+                    completed: 'Session completed successfully',
+                    error: 'Session error occurred',
+                    stopped: 'Session stopped'
+                };
+
+                this.statusIndicator.innerHTML = `
+                    <i class="${statusIcons[status] || 'fas fa-circle'}"></i>
+                    <span>${details || statusTexts[status] || status}</span>
+                `;
+
+                // Update session state
+                this.isSessionRunning = ['running', 'initializing'].includes(status);
+                this.updateControls();
+
+                // Show/hide live indicator
+                if (status === 'running') {
+                    this.liveIndicator.style.display = 'block';
+                } else {
+                    this.liveIndicator.style.display = 'none';
+                }
+            }
+
+            updateControls() {
+                this.startBtn.disabled = this.isSessionRunning;
+                this.stopBtn.disabled = !this.isSessionRunning;
+            }
+
+            startSession() {
+                if (!this.isConnected) {
+                    this.showError('Not connected to server');
+                    return;
+                }
+
+                const articlesCount = parseInt(this.articlesInput.value) || 5;
+                
+                this.ws.send(JSON.stringify({
+                    type: 'start_session',
+                    articles_count: articlesCount,
+                    session_id: this.sessionIdInput.value || null
+                }));
+
+                this.messages = [];
+                this.renderMessages();
+            }
+
+            stopSession() {
+                if (!this.isConnected) return;
+
+                this.ws.send(JSON.stringify({
+                    type: 'stop_session'
+                }));
+            }
+
+            showEmptyState() {
+                this.chatContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-comments"></i>
+                        <h3>No active conversation</h3>
+                        <p>Start a new session to see the live editorial discussion</p>
+                        <div style="margin-top: 20px; font-size: 0.9rem; color: #666;">
+                            <strong>Enhanced Workflow:</strong><br>
+                            • Gary uses tools to collect and process articles<br>
+                            • Team collaborates on editorial decisions<br>
+                            • James publishes approved articles to Slack<br>
+                            • Real-time updates appear automatically
+                        </div>
+                    </div>
+                `;
+            }
+
+            showError(message) {
+                const errorEl = document.createElement('div');
+                errorEl.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: #f44336;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    z-index: 1001;
+                    font-weight: 500;
+                `;
+                errorEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
+                
+                document.body.appendChild(errorEl);
+                
+                setTimeout(() => {
+                    if (errorEl.parentNode) {
+                        errorEl.parentNode.removeChild(errorEl);
+                    }
+                }, 5000);
+            }
+
+            scrollToBottom() {
+                this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new NewsroomDashboard();
+        });
+    </script>
+</body>
+</html>
