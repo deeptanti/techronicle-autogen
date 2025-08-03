@@ -1,6 +1,6 @@
 """
-Fixed FastAPI WebSocket Server for Real-time Chat Display
-Fixes async/await issues and API key warnings
+Enhanced FastAPI Server with Agent Information API
+Adds endpoint to fetch agent system prompts directly from personality files
 """
 
 import warnings
@@ -26,6 +26,14 @@ import concurrent.futures
 from agents.newsroom import TechronicleNewsroom
 from utils.config import config
 
+# Import agent personalities to get their system messages
+from agents.personalities.gary_poussin import create_gary_agent
+from agents.personalities.aravind_rajen import create_aravind_agent
+from agents.personalities.tijana_jekic import create_tijana_agent
+from agents.personalities.jerin_sojan import create_jerin_agent
+from agents.personalities.aayushi_patel import create_aayushi_agent
+from agents.personalities.james_guerra import create_james_agent
+
 app = FastAPI(title="Techronicle AutoGen Live Newsroom")
 
 # Setup static files and templates
@@ -47,6 +55,8 @@ class ConnectionManager:
         self.session_running = False
         self.conversation_messages = []
         self.loop = None
+        self.session_start_time = None
+        self.step_times = {}
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -119,6 +129,109 @@ async def get_dashboard(request: Request):
     """Serve the main dashboard"""
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
+@app.get("/api/agents")
+async def get_agents_info():
+    """Get information about all agents including their system prompts"""
+    
+    # Create temporary agent instances to get their system messages
+    agent_creators = {
+        "gary": create_gary_agent,
+        "aravind": create_aravind_agent,
+        "tijana": create_tijana_agent,
+        "jerin": create_jerin_agent,
+        "aayushi": create_aayushi_agent,
+        "james": create_james_agent
+    }
+    
+    agents_info = {}
+    
+    for agent_key, creator_func in agent_creators.items():
+        try:
+            # Create agent instance
+            agent = creator_func()
+            
+            # Extract agent information
+            agents_info[agent_key] = {
+                "name": agent.name,
+                "description": agent.description,
+                "system_message": agent.system_message,
+                "max_consecutive_auto_reply": agent.max_consecutive_auto_reply,
+                "llm_config": {
+                    "model": agent.llm_config.get("model", "unknown"),
+                    "temperature": agent.llm_config.get("temperature", 0.7)
+                }
+            }
+            
+        except Exception as e:
+            # Fallback info if agent creation fails
+            agents_info[agent_key] = {
+                "name": agent_key.title(),
+                "description": f"Error loading {agent_key}: {str(e)}",
+                "system_message": f"Could not load system message for {agent_key}",
+                "max_consecutive_auto_reply": 0,
+                "llm_config": {"model": "unknown", "temperature": 0.7}
+            }
+    
+    return agents_info
+
+@app.get("/api/agent/{agent_key}")
+async def get_agent_info(agent_key: str):
+    """Get detailed information about a specific agent"""
+    
+    agent_creators = {
+        "gary": create_gary_agent,
+        "aravind": create_aravind_agent,
+        "tijana": create_tijana_agent,
+        "jerin": create_jerin_agent,
+        "aayushi": create_aayushi_agent,
+        "james": create_james_agent
+    }
+    
+    if agent_key not in agent_creators:
+        return {"error": f"Agent '{agent_key}' not found"}
+    
+    try:
+        # Create agent instance
+        agent = agent_creators[agent_key]()
+        
+        # Agent metadata
+        agent_metadata = {
+            "gary": {"full_name": "Gary Poussin", "role": "Beat Reporter", "age": 28, "color": "#2196f3", "emoji": "📰"},
+            "aravind": {"full_name": "Dr. Aravind Rajen", "role": "Senior Market Analyst", "age": 34, "color": "#9c27b0", "emoji": "🔍"},
+            "tijana": {"full_name": "Tijana Jekic", "role": "Copy Editor & Fact Checker", "age": 31, "color": "#ff9800", "emoji": "✏️"},
+            "jerin": {"full_name": "Jerin Sojan", "role": "Managing Editor", "age": 38, "color": "#4caf50", "emoji": "⚖️"},
+            "aayushi": {"full_name": "Aayushi Patel", "role": "Audience Development Editor", "age": 26, "color": "#e91e63", "emoji": "📱"},
+            "james": {"full_name": "James Guerra", "role": "Digital Publishing Manager", "age": 29, "color": "#8bc34a", "emoji": "🚀"}
+        }
+        
+        metadata = agent_metadata.get(agent_key, {
+            "full_name": agent_key.title(),
+            "role": "Team Member",
+            "age": 30,
+            "color": "#666666",
+            "emoji": "🤖"
+        })
+        
+        return {
+            "key": agent_key,
+            "name": agent.name,
+            "full_name": metadata["full_name"],
+            "role": metadata["role"],
+            "age": metadata["age"],
+            "color": metadata["color"],
+            "emoji": metadata["emoji"],
+            "description": agent.description,
+            "system_message": agent.system_message,
+            "max_consecutive_auto_reply": agent.max_consecutive_auto_reply,
+            "llm_config": {
+                "model": agent.llm_config.get("model", "unknown"),
+                "temperature": agent.llm_config.get("temperature", 0.7)
+            }
+        }
+        
+    except Exception as e:
+        return {"error": f"Could not load agent '{agent_key}': {str(e)}"}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -151,8 +264,10 @@ async def start_newsroom_session(articles_count: int):
     
     manager.session_running = True
     manager.conversation_messages = []
+    manager.session_start_time = datetime.now()
+    manager.step_times = {}
     
-    await manager.send_status("initializing", "Starting newsroom agents...")
+    await manager.send_status("initializing", "Setting up editorial meeting...")
     
     # Use thread pool executor for CPU-intensive work
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -164,7 +279,7 @@ async def start_newsroom_session(articles_count: int):
             manager.newsroom_instance = TechronicleNewsroom(session_id=session_id)
             
             # Send initialization complete (thread-safe)
-            manager.send_status_sync("initialized", f"Session {session_id} ready")
+            manager.send_status_sync("initialized", f"Editorial meeting {session_id} ready")
             
             # Start monitoring conversation
             monitor_thread = threading.Thread(target=monitor_conversation, daemon=True)
@@ -223,11 +338,11 @@ def monitor_conversation():
             break
 
 def format_message_for_ui(msg: dict) -> dict:
-    """Format message for UI display"""
+    """Enhanced message formatting for UI display"""
     speaker = msg.get("name", "Unknown")
     content = msg.get("content", "")
     
-    # Agent info mapping
+    # Enhanced agent info mapping
     agent_info = {
         "Gary": {
             "designation": "Beat Reporter",
@@ -235,18 +350,18 @@ def format_message_for_ui(msg: dict) -> dict:
             "emoji": "📰"
         },
         "Aravind": {
-            "designation": "Market Analyst",
+            "designation": "Market Analyst", 
             "color": "#9c27b0",
             "emoji": "🔍"
         },
         "Tijana": {
-            "designation": "Copy Editor", 
-            "color": "#ff9800",
+            "designation": "Copy Editor",
+            "color": "#ff9800", 
             "emoji": "✏️"
         },
         "Jerin": {
             "designation": "Managing Editor",
-            "color": "#4caf50", 
+            "color": "#4caf50",
             "emoji": "⚖️"
         },
         "Aayushi": {
@@ -255,7 +370,7 @@ def format_message_for_ui(msg: dict) -> dict:
             "emoji": "📱"
         },
         "James": {
-            "designation": "Publishing Manager", 
+            "designation": "Publishing Manager",
             "color": "#8bc34a",
             "emoji": "🚀"
         }
@@ -263,29 +378,124 @@ def format_message_for_ui(msg: dict) -> dict:
     
     info = agent_info.get(speaker, {
         "designation": "Team Member",
-        "color": "#757575", 
+        "color": "#757575",
         "emoji": "🤖"
     })
     
-    # Detect message type
-    message_type = "normal"
-    if any(keyword in content.lower() for keyword in ["decision", "approve", "publish", "override", "executive"]):
+    # Enhanced message type detection with meeting context
+    message_type = "discussion"
+    
+    # Make content sound more like a meeting
+    meeting_content = enhance_meeting_language(content)
+    
+    # Detect specific message types
+    if any(keyword in content.lower() for keyword in ["decision", "approve", "publish", "override", "executive", "final call"]):
         message_type = "decision"
-    elif any(keyword in content.lower() for keyword in ["tool", "processing", "collected", "analyzed", "scraping", "relevance"]):
+    elif any(keyword in content.lower() for keyword in ["tool", "processing", "collected", "analyzed", "scraping", "relevance", "data shows"]):
         message_type = "tool"
-    elif any(keyword in content.lower() for keyword in ["urgent", "breaking", "immediately", "scoop"]):
+    elif any(keyword in content.lower() for keyword in ["urgent", "breaking", "immediately", "scoop", "alert"]):
         message_type = "urgent"
+    elif any(keyword in content.lower() for keyword in ["concern", "issue", "problem", "risk", "warning"]):
+        message_type = "concern"
+    
+    # Shorten long responses for better UX
+    shortened_content = shorten_response(meeting_content)
     
     return {
         "id": str(uuid.uuid4()),
         "speaker": speaker,
-        "content": content,
+        "content": shortened_content,
+        "original_content": meeting_content,
         "timestamp": datetime.now().isoformat(),
         "designation": info["designation"],
         "color": info["color"],
         "emoji": info["emoji"],
-        "message_type": message_type
+        "message_type": message_type,
+        "is_shortened": len(shortened_content) < len(meeting_content)
     }
+
+def enhance_meeting_language(content: str) -> str:
+    """Transform agent responses to sound more like a meeting discussion"""
+    
+    # Meeting conversation patterns
+    meeting_replacements = [
+        # Make it conversational
+        ("I will", "I'll"),
+        ("I am going to", "I'm going to"),
+        ("Let me analyze", "Looking at this"),
+        ("Based on my analysis", "From what I can see"),
+        ("I recommend", "I think we should"),
+        ("I suggest", "How about we"),
+        ("I believe", "In my view"),
+        ("I think", "I feel"),
+        ("According to", "Based on"),
+        ("The data shows", "What I'm seeing in the data is"),
+        
+        # Remove robotic language
+        ("As an AI", ""),
+        ("I am programmed to", "I"),
+        ("My algorithms", "My analysis"),
+        ("Processing complete", "I've finished reviewing"),
+        ("Task completed", "Done with that"),
+        
+        # Make it more collaborative
+        ("I will now", "Let me"),
+        ("Please note", "Just to mention"),
+        ("It is important to", "We should"),
+        ("We must", "We need to"),
+        ("It is recommended", "I'd suggest"),
+        
+        # Meeting-specific language
+        ("Here are the results", "Here's what I found"),
+        ("In conclusion", "So to wrap up"),
+        ("To summarize", "Bottom line"),
+        ("Furthermore", "Also"),
+        ("Additionally", "And"),
+        ("However", "But"),
+        ("Therefore", "So"),
+        ("Nevertheless", "Still"),
+    ]
+    
+    enhanced_content = content
+    for old, new in meeting_replacements:
+        enhanced_content = enhanced_content.replace(old, new)
+    
+    # Add conversational connectors
+    if not any(starter in enhanced_content[:50].lower() for starter in ["hey", "so", "well", "okay", "alright", "now"]):
+        conversation_starters = ["So", "Alright", "Okay", "Now", "Well"]
+        import random
+        enhanced_content = f"{random.choice(conversation_starters)}, {enhanced_content.lower()}" if enhanced_content else enhanced_content
+    
+    return enhanced_content
+
+def shorten_response(content: str, max_length: int = 400) -> str:
+    """Shorten agent responses for better UX while preserving key information"""
+    
+    if len(content) <= max_length:
+        return content
+    
+    # Try to find a natural break point
+    sentences = content.split('. ')
+    shortened = ""
+    
+    for sentence in sentences:
+        if len(shortened + sentence + '. ') > max_length:
+            break
+        shortened += sentence + '. '
+    
+    # If we couldn't fit even one sentence, truncate at word boundary
+    if not shortened:
+        words = content.split()
+        while len(' '.join(words)) > max_length and words:
+            words.pop()
+        shortened = ' '.join(words)
+    
+    # Clean up and add ellipsis
+    shortened = shortened.strip()
+    if not shortened.endswith('.'):
+        shortened += '...'
+    
+    return shortened
 
 @app.get("/api/status")
 async def get_status():
@@ -294,7 +504,8 @@ async def get_status():
         "session_running": manager.session_running,
         "message_count": len(manager.conversation_messages),
         "has_newsroom": manager.newsroom_instance is not None,
-        "api_key_configured": bool(config.openai_api_key)
+        "api_key_configured": bool(config.openai_api_key),
+        "session_start_time": manager.session_start_time.isoformat() if manager.session_start_time else None
     }
 
 @app.post("/api/start_session")
@@ -322,10 +533,11 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     
-    print("🚀 Starting Techronicle AutoGen Server...")
+    print("🚀 Starting Enhanced Techronicle AutoGen Server...")
     print("📡 WebSocket endpoint: ws://localhost:8000/ws")
     print("🌐 Dashboard: http://localhost:8000")
     print("💡 API Status: http://localhost:8000/api/status")
+    print("👥 Agents API: http://localhost:8000/api/agents")
     
     # Check configuration
     if not config.openai_api_key:
