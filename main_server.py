@@ -12,6 +12,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from http.client import HTTPException
 import json
 import asyncio
 import threading
@@ -244,6 +245,30 @@ async def get_agent_info(agent_key: str):
         
     except Exception as e:
         return {"error": f"Could not load agent '{agent_key}': {str(e)}"}
+
+@app.get("/api/latest-published-article")
+async def get_latest_published_article():
+    try:
+        published_dir = Path("data/published")
+        if not published_dir.exists():
+            raise HTTPException(status_code=404, detail="Published directory not found")
+        
+        # Get all JSON files in published directory
+        json_files = list(published_dir.glob("*.json"))
+        if not json_files:
+            raise HTTPException(status_code=404, detail="No published articles found")
+        
+        # Get the latest file by modification time
+        latest_file = max(json_files, key=lambda f: f.stat().st_mtime)
+        
+        # Read and return the article content
+        with open(latest_file, 'r', encoding='utf-8') as f:
+            article_data = json.load(f)
+        
+        return article_data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load article: {str(e)}")
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

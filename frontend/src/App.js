@@ -19,6 +19,230 @@ import {
 } from 'lucide-react';
 import './App.css';
 
+// Published Article Modal Component
+const ArticleModal = ({ article, isOpen, onClose }) => {
+  if (!isOpen || !article) return null;
+
+  // Extract the actual article content from the nested structure
+  const actualArticle = article.original_article || article;
+  const articleTitle = actualArticle.title || article.title;
+  const articleContent = actualArticle.content || actualArticle.body || article.content || article.body;
+  const articleSources = actualArticle.sources || article.sources || [actualArticle.source || article.source].filter(Boolean);
+  const keyPoints = actualArticle.key_points || article.key_points || actualArticle.key_topics || [];
+
+  console.log('ArticleModal - article data:', article);
+  console.log('ArticleModal - extracted content:', articleContent);
+
+  const modalContent = (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Article Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Newspaper size={24} />
+              <div>
+                <h1 className="text-2xl font-bold">Published Article</h1>
+                <p className="text-blue-100">Live from Techronicle Newsroom</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+            >
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        {/* Article Content */}
+        <div className="p-8">
+          {/* Article Meta */}
+          <div className="mb-6 pb-4 border-b border-gray-200">
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">{articleTitle}</h1>
+            <div className="flex items-center space-x-4 text-sm text-gray-600">
+              <span className="flex items-center space-x-1">
+                <Clock size={16} />
+                <span>{new Date(article.published_at || actualArticle.published || Date.now()).toLocaleDateString()}</span>
+              </span>
+              <span className="flex items-center space-x-1">
+                <Users size={16} />
+                <span>Techronicle Editorial Team</span>
+              </span>
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                {actualArticle.category || 'Technology'}
+              </span>
+              {article.publication_id && (
+                <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                  ID: {article.publication_id}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Article Body */}
+          <div className="prose prose-lg max-w-none">
+            {articleContent ? (
+              <div className="text-gray-800 leading-relaxed space-y-4">
+                {articleContent.split('\n\n').map((paragraph, index) => (
+                  <p key={index} className="mb-4 text-justify">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-gray-600">
+                  <p className="mb-2">📰 Article content not available</p>
+                  <p className="text-sm">Please check your backend configuration</p>
+                  <div className="mt-4 text-xs text-gray-500">
+                    <p>Debug info: {JSON.stringify({
+                      hasArticle: !!article,
+                      hasOriginalArticle: !!article.original_article,
+                      hasContent: !!articleContent,
+                      keys: Object.keys(article || {})
+                    })}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Key Points Section */}
+          {keyPoints && keyPoints.length > 0 && (
+            <div className="mt-8 p-6 bg-blue-50 rounded-xl border border-blue-200">
+              <h3 className="text-lg font-semibold text-blue-900 mb-3 flex items-center">
+                <TrendingUp size={18} className="mr-2" />
+                {actualArticle.key_topics ? 'Key Topics' : 'Key Points'}
+              </h3>
+              <ul className="space-y-2">
+                {keyPoints.map((point, index) => (
+                  <li key={index} className="flex items-start space-x-2 text-blue-800">
+                    <span className="text-blue-500 mt-1">•</span>
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Article Stats */}
+          {(actualArticle.word_count || actualArticle.sentiment || actualArticle.crypto_relevance) && (
+            <div className="mt-8 p-6 bg-gray-50 rounded-xl border border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Article Analytics</h3>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                {actualArticle.word_count && (
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">{actualArticle.word_count}</div>
+                    <div className="text-sm text-gray-600">Words</div>
+                  </div>
+                )}
+                {actualArticle.sentiment && (
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900 capitalize">{actualArticle.sentiment}</div>
+                    <div className="text-sm text-gray-600">Sentiment</div>
+                  </div>
+                )}
+                {actualArticle.crypto_relevance && (
+                  <div>
+                    <div className="text-2xl font-bold text-gray-900">{Math.round(actualArticle.crypto_relevance * 100)}%</div>
+                    <div className="text-sm text-gray-600">Relevance</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sources Section */}
+          {articleSources && articleSources.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                <ExternalLink size={18} className="mr-2" />
+                Sources
+              </h3>
+              <div className="space-y-2">
+                {articleSources.map((source, index) => (
+                  <div key={index} className="flex items-center space-x-2 text-sm text-gray-600">
+                    <span className="text-gray-400">•</span>
+                    <span>{typeof source === 'string' ? source : source.name || source.url || source}</span>
+                  </div>
+                ))}
+              </div>
+              {actualArticle.link && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                  <a 
+                    href={actualArticle.link} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 text-sm flex items-center space-x-1"
+                  >
+                    <ExternalLink size={14} />
+                    <span>View Original Article</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Article Metadata */}
+          <div className="mt-8 pt-6 border-t border-gray-200 bg-gray-50 rounded-lg p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-medium text-gray-900">Published by {article.published_by || 'Techronicle AI Newsroom'}</p>
+                <p className="text-gray-600">Collaborative editorial decision by our AI team</p>
+                {article.session_id && (
+                  <p className="text-gray-500 mt-1">Session: {article.session_id}</p>
+                )}
+              </div>
+              <div className="text-right">
+                {actualArticle.word_count && (
+                  <p className="text-gray-600">Word Count: {actualArticle.word_count}</p>
+                )}
+                {actualArticle.processing_status && (
+                  <p className="text-gray-600">Status: {actualArticle.processing_status}</p>
+                )}
+                <p className="text-gray-500 text-xs mt-1">
+                  Published: {new Date(article.published_at || Date.now()).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return createPortal(modalContent, document.body);
+};
+
+// Published Article Button Component
+const PublishedArticleButton = ({ article, onViewArticle }) => {
+  return (
+    <div className="mt-6 p-4 bg-green-500/20 backdrop-blur-sm rounded-2xl border border-green-500/30">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+            <CheckCircle size={16} className="text-white" />
+          </div>
+          <div>
+            <h4 className="text-white font-semibold">Article Published!</h4>
+            <p className="text-green-200 text-sm">
+              {article?.title || 'The editorial decision has been made and the article is now live'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onViewArticle}
+          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl font-medium transition-colors duration-200 flex items-center space-x-2"
+        >
+          <Eye size={16} />
+          <span>Read Article</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // Agent Profile Modal Component
 const AgentModal = ({ agent, isOpen, onClose }) => {
   if (!isOpen || !agent) return null;
@@ -42,7 +266,7 @@ const AgentModal = ({ agent, isOpen, onClose }) => {
         <div className={`bg-gradient-to-r ${getAgentColor(agent.key)} p-6 text-white`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white shadow-lg">
+              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl">
                 <img 
                   src={`/images/${agent.key}.jpg`}
                   alt={agent.name}
@@ -53,7 +277,7 @@ const AgentModal = ({ agent, isOpen, onClose }) => {
                   }}
                 />
                 <div 
-                  className="w-full h-full bg-white/20 flex items-center justify-center text-white text-2xl font-bold"
+                  className="w-full h-full bg-white/20 flex items-center justify-center text-white text-4xl font-bold"
                   style={{ display: 'none' }}
                 >
                   {agent.name[0]}
@@ -252,7 +476,7 @@ const ChatMessage = ({ message, onToggleExpand, isExpanded }) => {
     : message.content;
 
   return (
-    <div className="flex items-start space-x-3 p-4 hover:bg-white/5 rounded-lg transition-colors message-enter">
+    <div className="flex items-start space-x-3 p-4 hover:bg-white/5 rounded-2xl transition-colors message-enter">
       {/* Avatar */}
       <div className="flex-shrink-0">
         <div className={`w-10 h-10 rounded-full ${getAgentColor(message.speaker)} 
@@ -295,7 +519,7 @@ const ChatMessage = ({ message, onToggleExpand, isExpanded }) => {
         </div>
 
         {/* Message Text */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
           <div className="text-white/90 leading-relaxed whitespace-pre-wrap">
             {displayContent}
           </div>
@@ -391,6 +615,9 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [agentProfiles, setAgentProfiles] = useState({});
   const [processingArticles, setProcessingArticles] = useState([]);
+  const [publishedArticle, setPublishedArticle] = useState(null);
+  const [conversationEnded, setConversationEnded] = useState(false);
+  const [showArticleModal, setShowArticleModal] = useState(false);
   
   // WebSocket and refs
   const ws = useRef(null);
@@ -459,6 +686,48 @@ function App() {
     };
   }, []);
 
+  // Load latest published article
+  const loadLatestPublishedArticle = async () => {
+    try {
+      console.log('Attempting to load latest published article...');
+      const response = await fetch('http://localhost:8000/api/latest-published-article');
+      
+      if (response.ok) {
+        const article = await response.json();
+        console.log('Article loaded successfully:', article);
+        setPublishedArticle(article);
+      } else {
+        console.warn('Failed to load article, using fallback');
+        // Fallback article if API fails
+        setPublishedArticle({
+          id: 'fallback-' + Date.now(),
+          title: 'Article Published Successfully',
+          content: 'The editorial team has completed their review and the article has been published. The actual article content will be available once the backend API is properly configured.',
+          timestamp: new Date().toISOString(),
+          category: 'Technology',
+          sources: ['Techronicle Editorial Team'],
+          key_points: ['Article has been reviewed and approved', 'Published to designated channels']
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load latest published article:', error);
+      // Fallback article on error
+      setPublishedArticle({
+        id: 'error-fallback-' + Date.now(),
+        title: 'Editorial Decision Complete',
+        content: 'The AI editorial team has successfully completed their collaborative decision-making process. The article has been reviewed, approved, and is now ready for publication.\n\nTo view the actual published article content, please ensure your backend API endpoint "/api/latest-published-article" is properly configured to serve files from the techronicle-autogen/data/published directory.',
+        timestamp: new Date().toISOString(),
+        category: 'System',
+        sources: ['Techronicle AI Editorial System'],
+        key_points: [
+          'Editorial workflow completed successfully',
+          'Article approved by managing editor',
+          'Ready for publication across platforms'
+        ]
+      });
+    }
+  };
+
   // Handle WebSocket messages
   const handleWebSocketMessage = (data) => {
     switch (data.type) {
@@ -483,15 +752,29 @@ function App() {
         
         if (data.status === 'running') {
           setCurrentStep(0);
+          setConversationEnded(false);
+          setPublishedArticle(null);
         } else if (data.status === 'completed') {
           setCurrentStep(5);
-          setProcessingArticles([]); // Clear processing articles when done
+          setProcessingArticles([]);
+          setConversationEnded(true);
+          // Load the actual latest published article from the backend
+          setTimeout(() => {
+            loadLatestPublishedArticle();
+          }, 1000); // Small delay to ensure article is written to disk
         }
         break;
       case 'article_processing':
         // Handle article processing updates
         if (data.articles) {
           setProcessingArticles(data.articles);
+        }
+        break;
+      case 'article_published':
+        // Handle when backend sends the actual published article
+        if (data.article) {
+          setPublishedArticle(data.article);
+          setConversationEnded(true);
         }
         break;
       case 'error':
@@ -555,6 +838,9 @@ function App() {
     setMessages([]);
     setCurrentStep(-1);
     setStepTimes({});
+    setConversationEnded(false);
+    setPublishedArticle(null);
+    setShowArticleModal(false);
   };
 
   // Stop session
@@ -566,6 +852,9 @@ function App() {
     }));
     
     setProcessingArticles([]);
+    setConversationEnded(false);
+    setPublishedArticle(null);
+    setShowArticleModal(false);
   };
 
   // Handle agent click
@@ -598,6 +887,15 @@ function App() {
   // Close agent modal
   const closeAgentModal = () => {
     setSelectedAgent(null);
+  };
+
+  // Handle article modal
+  const openArticleModal = () => {
+    setShowArticleModal(true);
+  };
+
+  const closeArticleModal = () => {
+    setShowArticleModal(false);
   };
 
   // Toggle message expansion
@@ -770,6 +1068,14 @@ function App() {
                 />
               ))
             )}
+            
+            {/* Published Article Button - Show at end of conversation */}
+            {conversationEnded && publishedArticle && (
+              <PublishedArticleButton 
+                article={publishedArticle}
+                onViewArticle={openArticleModal}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -779,6 +1085,13 @@ function App() {
         agent={selectedAgent}
         isOpen={!!selectedAgent}
         onClose={closeAgentModal}
+      />
+
+      {/* Published Article Modal */}
+      <ArticleModal 
+        article={publishedArticle}
+        isOpen={showArticleModal}
+        onClose={closeArticleModal}
       />
     </div>
   );
