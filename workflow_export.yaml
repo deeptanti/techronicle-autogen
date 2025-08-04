@@ -1,0 +1,409 @@
+# Techronicle AutoGen - Editorial Workflow Definition
+# Complete system workflow for multi-agent news curation
+
+workflow:
+  name: "Techronicle Editorial Workflow"
+  version: "1.0.0"
+  description: "Multi-agent AI newsroom for crypto news curation"
+  
+  # System Architecture
+  architecture:
+    framework: "Microsoft AutoGen"
+    backend: "FastAPI + WebSocket"
+    frontend: "React + Tailwind CSS"
+    database: "File-based JSON storage"
+    
+  # Agent Definitions
+  agents:
+    - id: "gary_poussin"
+      name: "Gary Poussin"
+      role: "Beat Reporter"
+      age: 28
+      background: "Ex-CoinDesk, Northwestern"
+      personality:
+        - "Hustler mentality"
+        - "Crypto slang user"
+        - "Source development focused"
+      responsibilities:
+        - "RSS feed collection"
+        - "Web scraping coordination"
+        - "Story discovery"
+        - "Initial content processing"
+      tools:
+        - "RSS Collector"
+        - "Web Scraper"
+        - "Content Processor"
+      llm_config:
+        temperature: 0.85
+        max_auto_reply: 8
+        
+    - id: "aravind_rajen"
+      name: "Dr. Aravind Rajen"
+      role: "Senior Market Analyst"
+      age: 34
+      background: "PhD MIT, Ex-Goldman Sachs"
+      personality:
+        - "Data-driven decisions"
+        - "Methodical analysis"
+        - "Economic focus"
+      responsibilities:
+        - "Market context analysis"
+        - "Data verification"
+        - "Technical accuracy review"
+        - "Trend correlation"
+      tools:
+        - "Market Data APIs"
+        - "Statistical Analysis"
+      llm_config:
+        temperature: 0.6
+        max_auto_reply: 10
+        
+    - id: "tijana_jekic"
+      name: "Tijana Jekic"
+      role: "Copy Editor & Fact Checker"
+      age: 31
+      background: "Ex-Reuters, Columbia"
+      personality:
+        - "Fact-checking obsessed"
+        - "Risk-aware"
+        - "Compliance focused"
+      responsibilities:
+        - "Fact verification"
+        - "Legal compliance review"
+        - "Source validation"
+        - "Grammar and style"
+      tools:
+        - "Fact-checking databases"
+        - "Legal compliance tools"
+      llm_config:
+        temperature: 0.4
+        max_auto_reply: 10
+        
+    - id: "jerin_sojan"
+      name: "Jerin Sojan"
+      role: "Managing Editor"
+      age: 38
+      background: "Ex-WSJ, Wharton MBA"
+      personality:
+        - "Strategic thinking"
+        - "Diplomatic leadership"
+        - "Institution building"
+      responsibilities:
+        - "Final editorial decisions"
+        - "Team coordination"
+        - "Publication approval"
+        - "Quality assurance"
+      tools:
+        - "Editorial management systems"
+        - "Decision tracking"
+      llm_config:
+        temperature: 0.7
+        max_auto_reply: 10
+        mandatory_decisions: true
+        
+    - id: "aayushi_patel"
+      name: "Aayushi Patel"
+      role: "Audience Development Editor"
+      age: 26
+      background: "Ex-BuzzFeed, NYU"
+      personality:
+        - "Growth-focused"
+        - "Crypto Twitter native"
+        - "Engagement optimization"
+      responsibilities:
+        - "Audience analysis"
+        - "Engagement optimization"
+        - "Social media strategy"
+        - "Content performance"
+      tools:
+        - "Analytics platforms"
+        - "Social listening tools"
+      llm_config:
+        temperature: 0.8
+        max_auto_reply: 10
+        
+    - id: "james_guerra"
+      name: "James Guerra"
+      role: "Digital Publishing Manager"
+      age: 29
+      background: "Tech startups, UC Berkeley"
+      personality:
+        - "Optimization-focused"
+        - "Systems thinking"
+        - "Technical efficiency"
+      responsibilities:
+        - "Multi-platform publishing"
+        - "Technical optimization"
+        - "Performance monitoring"
+        - "Distribution management"
+      tools:
+        - "Slack Publisher"
+        - "Analytics tracking"
+        - "SEO optimization"
+      llm_config:
+        temperature: 0.6
+        max_auto_reply: 6
+
+  # Workflow Steps
+  editorial_workflow:
+    steps:
+      - step: 1
+        name: "Content Collection"
+        owner: "gary_poussin"
+        duration_estimate: "2-3 minutes"
+        actions:
+          - "Collect RSS feeds from configured sources"
+          - "Scrape article content with paywall detection"
+          - "Process content for crypto relevance"
+          - "Generate initial article summaries"
+        outputs:
+          - "processed_articles_list"
+          - "relevance_scores"
+          - "content_metadata"
+        tools_used:
+          - "RSSCollector"
+          - "WebScraper"
+          - "ContentProcessor"
+          
+      - step: 2
+        name: "Technical Analysis"
+        owner: "aravind_rajen"
+        duration_estimate: "1-2 minutes"
+        dependencies: ["Content Collection"]
+        actions:
+          - "Verify market data and claims"
+          - "Analyze technical accuracy"
+          - "Provide market context"
+          - "Cross-reference with data sources"
+        outputs:
+          - "technical_verification"
+          - "market_context"
+          - "data_validation"
+          
+      - step: 3
+        name: "Editorial Review"
+        owner: "tijana_jekic"
+        duration_estimate: "1-2 minutes"
+        dependencies: ["Technical Analysis"]
+        actions:
+          - "Fact-check all claims"
+          - "Review legal compliance"
+          - "Validate source credibility"
+          - "Check editorial standards"
+        outputs:
+          - "fact_check_report"
+          - "compliance_approval"
+          - "editorial_notes"
+          
+      - step: 4
+        name: "Audience Assessment"
+        owner: "aayushi_patel"
+        duration_estimate: "1 minute"
+        dependencies: ["Editorial Review"]
+        actions:
+          - "Assess audience engagement potential"
+          - "Optimize for social platforms"
+          - "Recommend content angles"
+          - "Predict performance metrics"
+        outputs:
+          - "engagement_assessment"
+          - "optimization_recommendations"
+          
+      - step: 5
+        name: "Editorial Decision"
+        owner: "jerin_sojan"
+        duration_estimate: "1 minute"
+        dependencies: ["Audience Assessment"]
+        actions:
+          - "Review all team input"
+          - "Make final publication decision"
+          - "Approve content modifications"
+          - "Set publication priority"
+        outputs:
+          - "publication_decision"
+          - "approved_articles"
+          - "editorial_rationale"
+        requirements:
+          - "Must approve at least 1 article"
+          - "Decision must be documented"
+          
+      - step: 6
+        name: "Publication"
+        owner: "james_guerra"
+        duration_estimate: "30 seconds"
+        dependencies: ["Editorial Decision"]
+        actions:
+          - "Format for Slack publication"
+          - "Execute multi-platform distribution"
+          - "Monitor publication metrics"
+          - "Generate performance reports"
+        outputs:
+          - "published_content"
+          - "publication_metrics"
+          - "distribution_report"
+        tools_used:
+          - "SlackPublisher"
+          - "PerformanceMonitor"
+
+  # Communication Flow
+  communication_patterns:
+    discussion_flow:
+      - phase: "initialization"
+        participants: ["gary_poussin"]
+        pattern: "broadcast_announcement"
+        content: "Session startup and article collection"
+        
+      - phase: "analysis"
+        participants: ["gary_poussin", "aravind_rajen"]
+        pattern: "handoff_discussion"
+        content: "Technical analysis and verification"
+        
+      - phase: "review"
+        participants: ["aravind_rajen", "tijana_jekic"]
+        pattern: "collaborative_review"
+        content: "Fact-checking and compliance"
+        
+      - phase: "optimization"
+        participants: ["tijana_jekic", "aayushi_patel"]
+        pattern: "consultation"
+        content: "Audience engagement assessment"
+        
+      - phase: "decision"
+        participants: ["aayushi_patel", "jerin_sojan"]
+        pattern: "escalation_to_authority"
+        content: "Final editorial decision"
+        
+      - phase: "publication"
+        participants: ["jerin_sojan", "james_guerra"]
+        pattern: "execution_handoff"
+        content: "Publication and distribution"
+
+  # Quality Controls
+  quality_gates:
+    - gate: "minimum_article_count"
+      requirement: "At least 1 article must be collected"
+      enforcer: "gary_poussin"
+      
+    - gate: "technical_verification"
+      requirement: "All technical claims must be verified"
+      enforcer: "aravind_rajen"
+      
+    - gate: "fact_check_completion"
+      requirement: "Fact-checking must be completed"
+      enforcer: "tijana_jekic"
+      
+    - gate: "editorial_approval"
+      requirement: "Managing editor must approve publication"
+      enforcer: "jerin_sojan"
+      mandatory: true
+      
+    - gate: "publication_success"
+      requirement: "At least 1 article must be published"
+      enforcer: "james_guerra"
+
+  # Configuration
+  system_config:
+    rss_sources:
+      - "https://cointelegraph.com/rss"
+      - "https://decrypt.co/feed"
+      - "https://www.coindesk.com/arc/outboundfeeds/rss/"
+      - "https://cryptonews.com/news/feed/"
+      - "https://www.crypto-news-flash.com/feed/"
+      
+    content_filters:
+      min_crypto_relevance: 0.4
+      min_word_count: 100
+      max_articles_per_session: 10
+      
+    timeouts:
+      conversation_timeout: 300 # seconds
+      max_rounds: 20
+      individual_response_timeout: 30
+      
+    llm_settings:
+      default_model: "gpt-4-1106-preview"
+      fallback_model: "gpt-3.5-turbo"
+      max_tokens: 2000
+      
+  # Error Handling
+  error_recovery:
+    - scenario: "no_articles_collected"
+      action: "use_mock_articles"
+      responsible_agent: "gary_poussin"
+      
+    - scenario: "conversation_stalled"
+      action: "timeout_and_force_decision"
+      responsible_agent: "jerin_sojan"
+      
+    - scenario: "no_editorial_decision"
+      action: "executive_override"
+      responsible_agent: "jerin_sojan"
+      mandatory: true
+      
+    - scenario: "publication_failure"
+      action: "retry_with_fallback"
+      responsible_agent: "james_guerra"
+      
+    - scenario: "api_rate_limit"
+      action: "exponential_backoff"
+      responsible_agent: "system"
+
+  # Monitoring & Analytics
+  metrics:
+    performance:
+      - "session_duration"
+      - "articles_processed"
+      - "publication_success_rate"
+      - "agent_participation_balance"
+      
+    quality:
+      - "fact_check_accuracy"
+      - "editorial_decision_consistency"
+      - "audience_engagement_prediction"
+      - "technical_verification_thoroughness"
+      
+    system:
+      - "api_response_times"
+      - "error_rates"
+      - "resource_utilization"
+      - "conversation_flow_efficiency"
+
+  # Integration Points
+  external_integrations:
+    slack:
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      enabled: "${SLACK_ENABLE}"
+      message_format: "rich_attachment"
+      
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "${OPENAI_MODEL}"
+      organization: "${OPENAI_ORG_ID}"
+      
+    web_scraping:
+      enabled: "${SCRAPING_ENABLED}"
+      rate_limit: "1-3 seconds"
+      user_agent_rotation: true
+      paywall_detection: true
+
+  # Data Persistence
+  storage:
+    conversations:
+      format: "JSON"
+      location: "data/conversations/"
+      retention: "indefinite"
+      
+    published_articles:
+      format: "JSON"
+      location: "data/published/"
+      metadata_included: true
+      
+    scraped_content:
+      format: "JSON"
+      location: "data/scraped/"
+      cleanup_policy: "30_days"
+      
+    agent_logs:
+      format: "structured_logs"
+      location: "logs/"
+      rotation: "daily"
