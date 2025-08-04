@@ -1,6 +1,6 @@
 """
-Enhanced FastAPI Server with Agent Information API
-Adds endpoint to fetch agent system prompts directly from personality files
+Updated FastAPI Server for React Frontend
+Serves React build files and provides API endpoints
 """
 
 import warnings
@@ -10,8 +10,8 @@ warnings.filterwarnings("ignore", message=".*API key specified is not a valid Op
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 import json
 import asyncio
 import threading
@@ -36,18 +36,21 @@ from agents.personalities.james_guerra import create_james_agent
 
 app = FastAPI(title="Techronicle AutoGen Live Newsroom")
 
-# Setup static files and templates
-static_dir = Path("static")
-templates_dir = Path("templates")
+# Add CORS middleware for React development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # React dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Create directories if they don't exist
-static_dir.mkdir(exist_ok=True)
-templates_dir.mkdir(exist_ok=True)
+# Setup static files for React build
+react_build_dir = Path("frontend/build")
+if react_build_dir.exists():
+    app.mount("/static", StaticFiles(directory=react_build_dir / "static"), name="static")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-# WebSocket connections manager
+# WebSocket connections manager (same as before)
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -123,17 +126,32 @@ manager = ConnectionManager()
 async def startup_event():
     """Store the event loop for thread-safe operations"""
     manager.loop = asyncio.get_event_loop()
+    print("🚀 FastAPI server started")
+    print("📡 WebSocket endpoint: ws://localhost:8000/ws")
+    print("🌐 React Frontend: http://localhost:3000 (development)")
+    print("🌐 Production Frontend: http://localhost:8000 (when built)")
 
-@app.get("/", response_class=HTMLResponse)
-async def get_dashboard(request: Request):
-    """Serve the main dashboard"""
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+# Serve React app (only for root path)
+@app.get("/")
+async def get_app():
+    """Serve React app"""
+    if react_build_dir.exists():
+        return FileResponse(react_build_dir / "index.html")
+    else:
+        return {
+            "message": "React frontend not built yet",
+            "instructions": [
+                "1. Navigate to frontend directory: cd frontend",
+                "2. Install dependencies: npm install", 
+                "3. Build for production: npm run build",
+                "4. Or run in development: npm start"
+            ]
+        }
 
 @app.get("/api/agents")
 async def get_agents_info():
     """Get information about all agents including their system prompts"""
     
-    # Create temporary agent instances to get their system messages
     agent_creators = {
         "gary": create_gary_agent,
         "aravind": create_aravind_agent,
@@ -147,10 +165,8 @@ async def get_agents_info():
     
     for agent_key, creator_func in agent_creators.items():
         try:
-            # Create agent instance
             agent = creator_func()
             
-            # Extract agent information
             agents_info[agent_key] = {
                 "name": agent.name,
                 "description": agent.description,
@@ -163,7 +179,6 @@ async def get_agents_info():
             }
             
         except Exception as e:
-            # Fallback info if agent creation fails
             agents_info[agent_key] = {
                 "name": agent_key.title(),
                 "description": f"Error loading {agent_key}: {str(e)}",
@@ -191,10 +206,8 @@ async def get_agent_info(agent_key: str):
         return {"error": f"Agent '{agent_key}' not found"}
     
     try:
-        # Create agent instance
         agent = agent_creators[agent_key]()
         
-        # Agent metadata
         agent_metadata = {
             "gary": {"full_name": "Gary Poussin", "role": "Beat Reporter", "age": 28, "color": "#2196f3", "emoji": "📰"},
             "aravind": {"full_name": "Dr. Aravind Rajen", "role": "Senior Market Analyst", "age": 34, "color": "#9c27b0", "emoji": "🔍"},
@@ -237,7 +250,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            # Keep connection alive and listen for client messages
             data = await websocket.receive_json()
             
             if data["type"] == "start_session":
@@ -269,27 +281,21 @@ async def start_newsroom_session(articles_count: int):
     
     await manager.send_status("initializing", "Setting up editorial meeting...")
     
-    # Use thread pool executor for CPU-intensive work
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
     
     def run_newsroom():
         try:
-            # Initialize newsroom
             session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
             manager.newsroom_instance = TechronicleNewsroom(session_id=session_id)
             
-            # Send initialization complete (thread-safe)
             manager.send_status_sync("initialized", f"Editorial meeting {session_id} ready")
             
-            # Start monitoring conversation
             monitor_thread = threading.Thread(target=monitor_conversation, daemon=True)
             monitor_thread.start()
             
-            # Run session
             manager.send_status_sync("running", "Editorial discussion in progress...")
             results = manager.newsroom_instance.run_editorial_session(articles_count)
             
-            # Session completed
             success = results.get("success", False)
             status = "completed" if success else "failed"
             details = f"Published {results.get('articles_published', 0)} articles" if success else results.get('error', 'Unknown error')
@@ -301,7 +307,6 @@ async def start_newsroom_session(articles_count: int):
             manager.send_status_sync("error", f"Session failed: {str(e)}")
             manager.session_running = False
     
-    # Run in thread pool
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(executor, run_newsroom)
 
@@ -316,14 +321,12 @@ def monitor_conversation():
                 current_count = len(current_messages)
                 
                 if current_count > last_message_count:
-                    # New messages found
                     new_messages = current_messages[last_message_count:]
                     
                     for msg in new_messages:
                         formatted_message = format_message_for_ui(msg)
                         manager.conversation_messages.append(formatted_message)
                         
-                        # Broadcast new message (thread-safe)
                         manager.broadcast_message_sync({
                             "type": "new_message",
                             "message": formatted_message
@@ -331,7 +334,7 @@ def monitor_conversation():
                     
                     last_message_count = current_count
             
-            time.sleep(1)  # Check every second
+            time.sleep(1)
             
         except Exception as e:
             print(f"Monitor error: {e}")
@@ -342,38 +345,13 @@ def format_message_for_ui(msg: dict) -> dict:
     speaker = msg.get("name", "Unknown")
     content = msg.get("content", "")
     
-    # Enhanced agent info mapping
     agent_info = {
-        "Gary": {
-            "designation": "Beat Reporter",
-            "color": "#2196f3",
-            "emoji": "📰"
-        },
-        "Aravind": {
-            "designation": "Market Analyst", 
-            "color": "#9c27b0",
-            "emoji": "🔍"
-        },
-        "Tijana": {
-            "designation": "Copy Editor",
-            "color": "#ff9800", 
-            "emoji": "✏️"
-        },
-        "Jerin": {
-            "designation": "Managing Editor",
-            "color": "#4caf50",
-            "emoji": "⚖️"
-        },
-        "Aayushi": {
-            "designation": "Audience Editor",
-            "color": "#e91e63",
-            "emoji": "📱"
-        },
-        "James": {
-            "designation": "Publishing Manager",
-            "color": "#8bc34a",
-            "emoji": "🚀"
-        }
+        "Gary": {"designation": "Beat Reporter", "color": "#2196f3", "emoji": "📰"},
+        "Aravind": {"designation": "Market Analyst", "color": "#9c27b0", "emoji": "🔍"},
+        "Tijana": {"designation": "Copy Editor", "color": "#ff9800", "emoji": "✏️"},
+        "Jerin": {"designation": "Managing Editor", "color": "#4caf50", "emoji": "⚖️"},
+        "Aayushi": {"designation": "Audience Editor", "color": "#e91e63", "emoji": "📱"},
+        "James": {"designation": "Publishing Manager", "color": "#8bc34a", "emoji": "🚀"}
     }
     
     info = agent_info.get(speaker, {
@@ -382,120 +360,25 @@ def format_message_for_ui(msg: dict) -> dict:
         "emoji": "🤖"
     })
     
-    # Enhanced message type detection with meeting context
     message_type = "discussion"
     
-    # Make content sound more like a meeting
-    meeting_content = enhance_meeting_language(content)
-    
-    # Detect specific message types
     if any(keyword in content.lower() for keyword in ["decision", "approve", "publish", "override", "executive", "final call"]):
         message_type = "decision"
-    elif any(keyword in content.lower() for keyword in ["tool", "processing", "collected", "analyzed", "scraping", "relevance", "data shows"]):
+    elif any(keyword in content.lower() for keyword in ["tool", "processing", "collected", "analyzed", "scraping", "relevance"]):
         message_type = "tool"
     elif any(keyword in content.lower() for keyword in ["urgent", "breaking", "immediately", "scoop", "alert"]):
         message_type = "urgent"
-    elif any(keyword in content.lower() for keyword in ["concern", "issue", "problem", "risk", "warning"]):
-        message_type = "concern"
-    
-    # Shorten long responses for better UX
-    shortened_content = shorten_response(meeting_content)
     
     return {
         "id": str(uuid.uuid4()),
         "speaker": speaker,
-        "content": shortened_content,
-        "original_content": meeting_content,
+        "content": content,
         "timestamp": datetime.now().isoformat(),
         "designation": info["designation"],
         "color": info["color"],
         "emoji": info["emoji"],
-        "message_type": message_type,
-        "is_shortened": len(shortened_content) < len(meeting_content)
+        "message_type": message_type
     }
-
-def enhance_meeting_language(content: str) -> str:
-    """Transform agent responses to sound more like a meeting discussion"""
-    
-    # Meeting conversation patterns
-    meeting_replacements = [
-        # Make it conversational
-        ("I will", "I'll"),
-        ("I am going to", "I'm going to"),
-        ("Let me analyze", "Looking at this"),
-        ("Based on my analysis", "From what I can see"),
-        ("I recommend", "I think we should"),
-        ("I suggest", "How about we"),
-        ("I believe", "In my view"),
-        ("I think", "I feel"),
-        ("According to", "Based on"),
-        ("The data shows", "What I'm seeing in the data is"),
-        
-        # Remove robotic language
-        ("As an AI", ""),
-        ("I am programmed to", "I"),
-        ("My algorithms", "My analysis"),
-        ("Processing complete", "I've finished reviewing"),
-        ("Task completed", "Done with that"),
-        
-        # Make it more collaborative
-        ("I will now", "Let me"),
-        ("Please note", "Just to mention"),
-        ("It is important to", "We should"),
-        ("We must", "We need to"),
-        ("It is recommended", "I'd suggest"),
-        
-        # Meeting-specific language
-        ("Here are the results", "Here's what I found"),
-        ("In conclusion", "So to wrap up"),
-        ("To summarize", "Bottom line"),
-        ("Furthermore", "Also"),
-        ("Additionally", "And"),
-        ("However", "But"),
-        ("Therefore", "So"),
-        ("Nevertheless", "Still"),
-    ]
-    
-    enhanced_content = content
-    for old, new in meeting_replacements:
-        enhanced_content = enhanced_content.replace(old, new)
-    
-    # Add conversational connectors
-    if not any(starter in enhanced_content[:50].lower() for starter in ["hey", "so", "well", "okay", "alright", "now"]):
-        conversation_starters = ["So", "Alright", "Okay", "Now", "Well"]
-        import random
-        enhanced_content = f"{random.choice(conversation_starters)}, {enhanced_content.lower()}" if enhanced_content else enhanced_content
-    
-    return enhanced_content
-
-def shorten_response(content: str, max_length: int = 400) -> str:
-    """Shorten agent responses for better UX while preserving key information"""
-    
-    if len(content) <= max_length:
-        return content
-    
-    # Try to find a natural break point
-    sentences = content.split('. ')
-    shortened = ""
-    
-    for sentence in sentences:
-        if len(shortened + sentence + '. ') > max_length:
-            break
-        shortened += sentence + '. '
-    
-    # If we couldn't fit even one sentence, truncate at word boundary
-    if not shortened:
-        words = content.split()
-        while len(' '.join(words)) > max_length and words:
-            words.pop()
-        shortened = ' '.join(words)
-    
-    # Clean up and add ellipsis
-    shortened = shortened.strip()
-    if not shortened.endswith('.'):
-        shortened += '...'
-    
-    return shortened
 
 @app.get("/api/status")
 async def get_status():
@@ -527,19 +410,34 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "active_connections": len(manager.active_connections),
-        "session_running": manager.session_running
+        "session_running": manager.session_running,
+        "frontend_available": react_build_dir.exists()
     }
+
+# Catch-all route for React Router (SPA) - MUST BE LAST
+@app.get("/{path:path}")
+async def catch_all(path: str):
+    """Catch-all route for React Router - handles all non-API routes"""
+    if react_build_dir.exists():
+        # For any non-API route, serve React app
+        return FileResponse(react_build_dir / "index.html")
+    else:
+        return {"message": "React frontend not built", "path": path}
 
 if __name__ == "__main__":
     import uvicorn
     
-    print("🚀 Starting Enhanced Techronicle AutoGen Server...")
+    print("🚀 Starting Techronicle AutoGen Server with React Support...")
     print("📡 WebSocket endpoint: ws://localhost:8000/ws")
-    print("🌐 Dashboard: http://localhost:8000")
-    print("💡 API Status: http://localhost:8000/api/status")
-    print("👥 Agents API: http://localhost:8000/api/agents")
+    print("🌐 API endpoints: http://localhost:8000/api/")
+    print("💡 Health check: http://localhost:8000/health")
     
-    # Check configuration
+    if react_build_dir.exists():
+        print("✅ React build found - serving production frontend at http://localhost:8000")
+    else:
+        print("⚠️  React build not found - run 'npm run build' in frontend directory")
+        print("🔧 For development, run React dev server: npm start (will run on http://localhost:3000)")
+    
     if not config.openai_api_key:
         print("⚠️  WARNING: OpenAI API key not found in environment variables!")
         print("   Please set OPENAI_API_KEY in your .env file")

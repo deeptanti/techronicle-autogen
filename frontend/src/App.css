@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Smooth animations */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Message entry animation */
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: slideInFromBottom 0.3s ease-out;
+}
+
+/* Pulse animation for live elements */
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Focus styles */
+input:focus, button:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
+
+/* Custom agent colors */
+.border-l-gary { border-left-color: #2196f3; }
+.border-l-aravind { border-left-color: #9c27b0; }
+.border-l-tijana { border-left-color: #ff9800; }
+.border-l-jerin { border-left-color: #4caf50; }
+.border-l-aayushi { border-left-color: #e91e63; }
+.border-l-james { border-left-color: #8bc34a; }
+
+.bg-gary { background-color: #2196f3; }
+.bg-aravind { background-color: #9c27b0; }
+.bg-tijana { background-color: #ff9800; }
+.bg-jerin { background-color: #4caf50; }
+.bg-aayushi { background-color: #e91e63; }
+.bg-james { background-color: #8bc34a; }
